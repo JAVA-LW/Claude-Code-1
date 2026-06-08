@@ -9,6 +9,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
+import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import {
@@ -93,6 +94,39 @@ function isManagedOAuthContext(): boolean {
     isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
     process.env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop'
   )
+}
+
+function getPewterOwlModel(): string {
+  const clientDataModel = getGlobalConfig().clientDataCache?.pewter_owl_model
+  if (typeof clientDataModel === 'string' && clientDataModel !== '') {
+    return clientDataModel
+  }
+  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_pewter_owl_model', '')
+}
+
+function isPewterOwlFeatureEnabled(
+  featureName: 'pewter_owl_header' | 'pewter_owl_tool' | 'pewter_owl_brief',
+): boolean {
+  if (process.env.CLAUDE_CODE_PEWTER_OWL !== undefined) {
+    return isEnvTruthy(process.env.CLAUDE_CODE_PEWTER_OWL)
+  }
+  if (getPewterOwlModel() === '') return false
+  return (
+    getFeatureValue_CACHED_MAY_BE_STALE(`tengu_${featureName}`, false) ||
+    getGlobalConfig().clientDataCache?.[featureName] === true
+  )
+}
+
+export function isPewterOwlHeader(): boolean {
+  return isPewterOwlFeatureEnabled('pewter_owl_header')
+}
+
+export function isPewterOwlTool(): boolean {
+  return isPewterOwlFeatureEnabled('pewter_owl_tool')
+}
+
+export function isPewterOwlBrief(): boolean {
+  return isPewterOwlFeatureEnabled('pewter_owl_brief')
 }
 
 /** Whether we are supporting direct 1P auth. */

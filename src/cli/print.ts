@@ -259,7 +259,12 @@ import {
 } from 'src/utils/messages/mappers.js'
 import { createModelSwitchBreadcrumbs } from 'src/utils/messages.js'
 import { collectContextData } from 'src/commands/context/context-noninteractive.js'
-import { LOCAL_COMMAND_STDOUT_TAG } from 'src/constants/xml.js'
+import {
+  BASH_INPUT_TAG,
+  LOCAL_COMMAND_EXIT_CODE_TAG,
+  LOCAL_COMMAND_STDERR_TAG,
+  LOCAL_COMMAND_STDOUT_TAG,
+} from 'src/constants/xml.js'
 import {
   statusListeners,
   type ClaudeAILimits,
@@ -350,7 +355,10 @@ import { stopTask } from '../tasks/stopTask.js'
 import { drainSdkEvents } from '../utils/sdkEventQueue.js'
 import { initializeGrowthBook } from '../services/analytics/growthbook.js'
 import { errorMessage, toError } from '../utils/errors.js'
+import { execFileNoThrowWithCwd } from '../utils/execFileNoThrow.js'
+import { getPlatform } from '../utils/platform.js'
 import { sleep } from '../utils/sleep.js'
+import { escapeXml } from '../utils/xml.js'
 import { isExtractModeActive } from '../memdir/paths.js'
 
 // Dead code elimination: conditional imports
@@ -418,6 +426,50 @@ type PromptValue = string | ContentBlockParam[]
 
 function toBlocks(v: PromptValue): ContentBlockParam[] {
   return typeof v === 'string' ? [{ type: 'text', text: v }] : v
+}
+
+export type HeadlessBashCommandInput = {
+  command: string
+  cwd?: string
+  abortSignal?: AbortSignal
+}
+
+export async function runHeadlessBashCommand({
+  command,
+  cwd: commandCwd,
+  abortSignal,
+}: HeadlessBashCommandInput): Promise<{
+  outputUuid: UUID
+  outputText: string
+  exitCode: number
+}> {
+  const cwd = commandCwd ?? getCwd()
+  const { file, args } =
+    getPlatform() === 'windows'
+      ? { file: 'pwsh', args: ['-NoProfile', '-Command', command] }
+      : { file: '/bin/sh', args: ['-c', command] }
+
+  const { stdout, stderr, code, error } = await execFileNoThrowWithCwd(
+    file,
+    args,
+    {
+      abortSignal,
+      cwd,
+      preserveOutputOnError: true,
+    },
+  )
+  const spawnError =
+    error && !error.startsWith(`Command failed with exit code ${code}`)
+      ? error
+      : ''
+
+  logEvent(spawnError ? 'input_remote_bash_failed' : 'input_remote_bash', {})
+
+  return {
+    outputUuid: randomUUID(),
+    outputText: `<${LOCAL_COMMAND_STDOUT_TAG}>${escapeXml(stdout)}</${LOCAL_COMMAND_STDOUT_TAG}><${LOCAL_COMMAND_STDERR_TAG}>${escapeXml(stderr || spawnError)}</${LOCAL_COMMAND_STDERR_TAG}><${LOCAL_COMMAND_EXIT_CODE_TAG}>${code}</${LOCAL_COMMAND_EXIT_CODE_TAG}>`,
+    exitCode: code,
+  }
 }
 
 /**
@@ -1249,6 +1301,7 @@ function runHeadlessStreaming(
   // Cache SDK MCP clients to avoid reconnecting on each run
   let sdkClients: MCPServerConnection[] = []
   let sdkTools: Tools = []
+  const remoteBashCommandPromises = new Set<Promise<void>>()
 
   // Track which MCP clients have had elicitation handlers registered
   const elicitationRegistered = new Set<string>()
@@ -2827,6 +2880,91 @@ function runHeadlessStreaming(
         notifyCommandLifecycle(eventId, 'completed')
       }
 
+      if (message.type === 'bash_command') {
+        const sessionId = getSessionId()
+        const commandUuid =
+          typeof message.uuid === 'string' ? (message.uuid as UUID) : undefined
+
+        if (commandUuid) {
+          if (receivedMessageUuids.has(commandUuid)) {
+            logForDebugging(
+              `Skipping duplicate bash_command message: ${commandUuid}`,
+            )
+            continue
+          }
+          trackReceivedMessageUuid(commandUuid)
+        }
+
+        if (typeof message.command !== 'string') {
+          output.enqueue({
+            type: 'user',
+            message: {
+              role: 'user',
+              content: `<${LOCAL_COMMAND_STDERR_TAG}>Command failed: missing command</${LOCAL_COMMAND_STDERR_TAG}>`,
+            },
+            session_id: sessionId,
+            parent_tool_use_id: null,
+            uuid: randomUUID(),
+            timestamp: new Date().toISOString(),
+            isReplay: true,
+          } satisfies SDKUserMessageReplay)
+          if (commandUuid) notifyCommandLifecycle(commandUuid, 'completed')
+          continue
+        }
+
+        output.enqueue({
+          type: 'user',
+          message: {
+            role: 'user',
+            content: `<${BASH_INPUT_TAG}>${escapeXml(message.command)}</${BASH_INPUT_TAG}>`,
+          },
+          session_id: sessionId,
+          parent_tool_use_id: null,
+          uuid: randomUUID(),
+          timestamp: new Date().toISOString(),
+          isReplay: true,
+        } satisfies SDKUserMessageReplay)
+
+        const ref: { promise: Promise<void> | null } = { promise: null }
+        ref.promise = (async () => {
+          try {
+            const result = await runHeadlessBashCommand({
+              command: message.command as string,
+              cwd: typeof message.cwd === 'string' ? message.cwd : undefined,
+              abortSignal: abortController?.signal,
+            })
+            output.enqueue({
+              type: 'user',
+              message: { role: 'user', content: result.outputText },
+              session_id: sessionId,
+              parent_tool_use_id: null,
+              uuid: result.outputUuid,
+              timestamp: new Date().toISOString(),
+              isReplay: true,
+            } satisfies SDKUserMessageReplay)
+          } catch (error) {
+            logError(toError(error))
+            output.enqueue({
+              type: 'user',
+              message: {
+                role: 'user',
+                content: `<${LOCAL_COMMAND_STDERR_TAG}>Command failed: ${escapeXml(errorMessage(error))}</${LOCAL_COMMAND_STDERR_TAG}>`,
+              },
+              session_id: sessionId,
+              parent_tool_use_id: null,
+              uuid: randomUUID(),
+              timestamp: new Date().toISOString(),
+              isReplay: true,
+            } satisfies SDKUserMessageReplay)
+          } finally {
+            if (commandUuid) notifyCommandLifecycle(commandUuid, 'completed')
+            if (ref.promise) remoteBashCommandPromises.delete(ref.promise)
+          }
+        })()
+        remoteBashCommandPromises.add(ref.promise)
+        continue
+      }
+
       if (message.type === 'control_request') {
         if (message.request.subtype === 'interrupt') {
           // Track escapes for attribution (ant-only feature)
@@ -4124,6 +4262,9 @@ function runHeadlessStreaming(
     inputClosed = true
     cronScheduler?.stop()
     if (!running) {
+      if (remoteBashCommandPromises.size > 0) {
+        await Promise.allSettled(remoteBashCommandPromises)
+      }
       // If a push-suggestion is in-flight, wait for it to emit before closing
       // the output stream (5 s safety timeout to prevent hanging).
       if (suggestionState.inflightPromise) {

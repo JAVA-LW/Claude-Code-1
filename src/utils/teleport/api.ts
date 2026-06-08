@@ -350,6 +350,69 @@ export type RemoteMessageContent =
   | string
   | Array<{ type: string; [key: string]: unknown }>
 
+export type RemoteBashCommandInput = {
+  command: string
+  cwd?: string
+}
+
+/**
+ * Sends a bash command event to an existing remote session via the Sessions API
+ */
+export async function sendBashCommandToRemoteSession(
+  sessionId: string,
+  input: RemoteBashCommandInput,
+  opts?: { uuid?: string },
+): Promise<boolean> {
+  try {
+    const { accessToken, orgUUID } = await prepareApiRequest()
+
+    const url = `${getOauthConfig().BASE_API_URL}/v1/sessions/${sessionId}/events`
+    const headers = {
+      ...getOAuthHeaders(accessToken),
+      'anthropic-beta': 'ccr-byoc-2025-07-29',
+      'x-organization-uuid': orgUUID,
+    }
+
+    const bashCommandEvent = {
+      uuid: opts?.uuid ?? randomUUID(),
+      session_id: sessionId,
+      type: 'bash_command',
+      command: input.command,
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    }
+
+    logForDebugging(
+      `[sendBashCommandToRemoteSession] Sending bash command to session ${sessionId}`,
+    )
+    const response = await axios.post(
+      url,
+      { events: [bashCommandEvent] },
+      {
+        headers,
+        validateStatus: status => status < 500,
+        timeout: 30000,
+      },
+    )
+
+    if (response.status === 200 || response.status === 201) {
+      logForDebugging(
+        `[sendBashCommandToRemoteSession] Successfully sent bash command to session ${sessionId}`,
+      )
+      return true
+    }
+
+    logForDebugging(
+      `[sendBashCommandToRemoteSession] Failed with status ${response.status}: ${jsonStringify(response.data)}`,
+    )
+    return false
+  } catch (error) {
+    logForDebugging(
+      `[sendBashCommandToRemoteSession] Error: ${errorMessage(error)}`,
+    )
+    return false
+  }
+}
+
 /**
  * Sends a user message event to an existing remote session via the Sessions API
  * @param sessionId The session ID to send the event to

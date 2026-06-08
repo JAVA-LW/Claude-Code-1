@@ -10,6 +10,7 @@ export const BASH_STDOUT_TAG = 'bash-stdout'
 export const BASH_STDERR_TAG = 'bash-stderr'
 export const LOCAL_COMMAND_STDOUT_TAG = 'local-command-stdout'
 export const LOCAL_COMMAND_STDERR_TAG = 'local-command-stderr'
+export const LOCAL_COMMAND_EXIT_CODE_TAG = 'local-command-exit-code'
 export const LOCAL_COMMAND_CAVEAT_TAG = 'local-command-caveat'
 
 // All terminal-related tags that indicate a message is terminal output, not a user prompt
@@ -19,6 +20,7 @@ export const TERMINAL_OUTPUT_TAGS = [
   BASH_STDERR_TAG,
   LOCAL_COMMAND_STDOUT_TAG,
   LOCAL_COMMAND_STDERR_TAG,
+  LOCAL_COMMAND_EXIT_CODE_TAG,
   LOCAL_COMMAND_CAVEAT_TAG,
 ] as const
 

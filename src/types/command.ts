@@ -172,6 +172,17 @@ export type CommandAvailability =
   // Console API key user (direct api.anthropic.com, not via claude.ai OAuth)
   | 'console'
 
+export type CommandRequires = {
+  workspace?: boolean
+  ink?: boolean
+}
+
+export type ThinClientDispatch =
+  | 'post-text'
+  | 'control-request'
+  | 'local-then-rpc'
+  | 'twin'
+
 export type CommandBase = {
   availability?: CommandAvailability[]
   description: string
@@ -200,6 +211,10 @@ export type CommandBase = {
   isSensitive?: boolean // If true, args are redacted from the conversation history
   /** Defaults to `name`. Only override when the displayed name differs (e.g. plugin prefix stripping). */
   userFacingName?: () => string
+  /** Runtime requirements used to decide whether thin/headless clients can dispatch the command. */
+  requires?: CommandRequires
+  /** How a thin client should route command execution. Defaults from command type when omitted. */
+  thinClientDispatch?: ThinClientDispatch
 }
 
 export type Command = CommandBase &

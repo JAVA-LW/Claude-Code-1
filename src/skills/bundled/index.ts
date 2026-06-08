@@ -2,6 +2,7 @@ import { feature } from 'bun:bundle'
 import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js'
 import { registerBatchSkill } from './batch.js'
 import { registerClaudeInChromeSkill } from './claudeInChrome.js'
+import { registerCoworkPluginSkill } from './coworkPlugin.js'
 import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
@@ -22,6 +23,7 @@ import { registerVerifySkill } from './verify.js'
  * 3. Import and call that function here
  */
 export function initBundledSkills(): void {
+  registerCoworkPluginSkill()
   registerUpdateConfigSkill()
   registerKeybindingsSkill()
   registerVerifySkill()

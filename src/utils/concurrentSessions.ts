@@ -45,6 +45,19 @@ export function isBgSession(): boolean {
   return envSessionKind() === 'bg'
 }
 
+const DAEMON_DETACH_SEQUENCE = '\x1B_cc-daemon-detach\x1B\\'
+const DAEMON_DETACH_MESSAGE_PREFIX = '\x1B_cc-detach-msg;'
+const DAEMON_STRING_TERMINATOR = '\x1B\\'
+
+export function formatDaemonDetachSequence(message?: string): string {
+  if (!message) return DAEMON_DETACH_SEQUENCE
+  return `${DAEMON_DETACH_MESSAGE_PREFIX}${message}${DAEMON_STRING_TERMINATOR}${DAEMON_DETACH_SEQUENCE}`
+}
+
+export function emitDaemonDetachSequence(message?: string): void {
+  process.stdout.write(formatDaemonDetachSequence(message))
+}
+
 /**
  * Write a PID file for this session and register cleanup.
  *

@@ -205,6 +205,7 @@ import debugToolCall from './commands/debug-tool-call/index.js'
 import { getSettingSourceName } from './utils/settings/constants.js'
 import {
   type Command,
+  type CommandRequires,
   getCommandName,
   isCommandEnabled,
 } from './types/command.js'
@@ -213,11 +214,13 @@ import {
 export type {
   Command,
   CommandBase,
+  CommandRequires,
   CommandResultDisplay,
   LocalCommandResult,
   LocalJSXCommandContext,
   PromptCommand,
   ResumeEntrypoint,
+  ThinClientDispatch,
 } from './types/command.js'
 export { getCommandName, isCommandEnabled } from './types/command.js'
 
@@ -558,25 +561,25 @@ export function getMcpSkillCommands(
   return []
 }
 
+export function isSkillToolCommand(cmd: Command): boolean {
+  return (
+    cmd.type === 'prompt' &&
+    !cmd.disableModelInvocation &&
+    (cmd.source === 'builtin' ||
+      cmd.loadedFrom === 'bundled' ||
+      cmd.loadedFrom === 'skills' ||
+      cmd.loadedFrom === 'commands_DEPRECATED' ||
+      cmd.hasUserSpecifiedDescription ||
+      !!cmd.whenToUse)
+  )
+}
+
 // SkillTool shows ALL prompt-based commands that the model can invoke
 // This includes both skills (from /skills/) and commands (from /commands/)
 export const getSkillToolCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
     const allCommands = await getCommands(cwd)
-    return allCommands.filter(
-      cmd =>
-        cmd.type === 'prompt' &&
-        !cmd.disableModelInvocation &&
-        cmd.source !== 'builtin' &&
-        // Always include skills from /skills/ dirs, bundled skills, and legacy /commands/ entries
-        // (they all get an auto-derived description from the first line if frontmatter is missing).
-        // Plugin/MCP commands still require an explicit description to appear in the listing.
-        (cmd.loadedFrom === 'bundled' ||
-          cmd.loadedFrom === 'skills' ||
-          cmd.loadedFrom === 'commands_DEPRECATED' ||
-          cmd.hasUserSpecifiedDescription ||
-          cmd.whenToUse),
-    )
+    return allCommands.filter(cmd => isSkillToolCommand(cmd) && cmd.source !== 'builtin')
   },
 )
 
@@ -675,6 +678,60 @@ export function isBridgeSafeCommand(cmd: Command): boolean {
   return BRIDGE_SAFE_COMMANDS.has(cmd)
 }
 
+export function findBridgeFallback(cmd: Command): Command | undefined {
+  if (cmd.type !== 'local-jsx') return undefined
+  for (const bridgeCommand of BRIDGE_SAFE_COMMANDS) {
+    if (bridgeCommand.name === cmd.name && bridgeCommand.type === 'local') {
+      return bridgeCommand
+    }
+  }
+  return undefined
+}
+
+export function isBridgeDispatchable(cmd: Command): boolean {
+  return isBridgeSafeCommand(cmd) || findBridgeFallback(cmd) !== undefined
+}
+
+export function deriveRequires(cmd: Command): CommandRequires {
+  if (cmd.requires) {
+    return {
+      workspace: cmd.requires.workspace ?? false,
+      ink: cmd.requires.ink ?? false,
+    }
+  }
+  switch (cmd.type) {
+    case 'prompt':
+      return { workspace: false, ink: false }
+    case 'local':
+      return { workspace: true, ink: false }
+    case 'local-jsx':
+      return { workspace: true, ink: true }
+  }
+}
+
+export function isThinClientSafe(cmd: Command): boolean {
+  return !deriveRequires(cmd).workspace || cmd.thinClientDispatch !== undefined
+}
+
+export function routeThinClientCommand(
+  cmd: Command,
+  canRunLocalCommand: boolean,
+): 'post-text' | 'local' | 'unavailable' {
+  if (cmd.type === 'prompt') return 'post-text'
+
+  switch (cmd.thinClientDispatch) {
+    case 'post-text':
+      return 'post-text'
+    case 'control-request':
+    case 'local-then-rpc':
+      return cmd.type === 'local' && !canRunLocalCommand ? 'unavailable' : 'local'
+    case 'twin':
+      return 'post-text'
+    case undefined:
+      return cmd.type === 'local-jsx' ? 'local' : 'post-text'
+  }
+}
+
 /**
  * Filter commands to only include those safe for remote mode.
  * Used to pre-filter commands when rendering the REPL in --remote mode,
@@ -682,7 +739,21 @@ export function isBridgeSafeCommand(cmd: Command): boolean {
  * the CCR init message arrives.
  */
 export function filterCommandsForRemoteMode(commands: Command[]): Command[] {
-  return commands.filter(cmd => REMOTE_SAFE_COMMANDS.has(cmd))
+  return commands.filter(
+    cmd =>
+      (cmd.type === 'prompt' &&
+        (cmd.source === 'builtin' || cmd.source === 'bundled') &&
+        isThinClientSafe(cmd)) ||
+      REMOTE_SAFE_COMMANDS.has(cmd),
+  )
+}
+
+export function filterCommandsForHeadless(commands: Command[]): Command[] {
+  return commands.filter(
+    cmd =>
+      (cmd.type === 'prompt' && !cmd.disableNonInteractive) ||
+      (cmd.type === 'local' && cmd.supportsNonInteractive),
+  )
 }
 
 export function findCommand(

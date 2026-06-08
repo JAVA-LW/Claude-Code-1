@@ -49,6 +49,9 @@ const PushNotificationTool =
     ? require('./tools/PushNotificationTool/PushNotificationTool.js')
         .PushNotificationTool
     : null
+const DesignSyncTool = feature('DESIGN_SYNC')
+  ? require('./tools/DesignSyncTool/DesignSyncTool.js').DesignSyncTool
+  : null
 const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
   ? require('./tools/SubscribePRTool/SubscribePRTool.js').SubscribePRTool
   : null
@@ -242,6 +245,7 @@ export function getAllBaseTools(): Tools {
     BriefTool,
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
+    ...(DesignSyncTool ? [DesignSyncTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
