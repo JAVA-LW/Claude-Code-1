@@ -1283,6 +1283,8 @@ export type SessionCronTask = {
   prompt: string
   createdAt: number
   recurring?: boolean
+  /** Runtime classification for process-local scheduled tasks. */
+  kind?: 'loop'
   /**
    * When set, the task was created by an in-process teammate (not the team lead).
    * The scheduler routes fires to that teammate's pendingUserMessages queue
