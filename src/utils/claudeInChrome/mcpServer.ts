@@ -115,11 +115,19 @@ export function createChromeContext(
     onToolCallDisconnected: () => {
       return `Browser extension is not connected. Please ensure the Claude browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into claude.ai with the same account as Claude Code. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
     },
-    onExtensionPaired: (deviceId: string, name: string) => {
+    onExtensionPaired: (
+      deviceId: string,
+      name: string,
+      knownDeviceIds?: string[],
+    ) => {
       saveGlobalConfig(config => {
+        const nextKnownDeviceIds = knownDeviceIds?.length
+          ? Array.from(new Set(knownDeviceIds))
+          : config.chromeExtension?.knownDeviceIds
         if (
           config.chromeExtension?.pairedDeviceId === deviceId &&
-          config.chromeExtension?.pairedDeviceName === name
+          config.chromeExtension?.pairedDeviceName === name &&
+          config.chromeExtension?.knownDeviceIds === nextKnownDeviceIds
         ) {
           return config
         }
@@ -128,6 +136,7 @@ export function createChromeContext(
           chromeExtension: {
             pairedDeviceId: deviceId,
             pairedDeviceName: name,
+            ...(nextKnownDeviceIds ? { knownDeviceIds: nextKnownDeviceIds } : {}),
           },
         }
       })
@@ -135,6 +144,20 @@ export function createChromeContext(
     },
     getPersistedDeviceId: () => {
       return getGlobalConfig().chromeExtension?.pairedDeviceId
+    },
+    askUserToolName: 'AskUserQuestion',
+    onRemoteExtensionWarning: extension => {
+      logger.warn(
+        `Selected Chrome extension appears to be remote: ${extension.name ?? extension.deviceId.slice(0, 8)}`,
+      )
+    },
+    onPairingPrompted: signal => {
+      logger.info(
+        'Chrome browser pairing requested; waiting for the user to confirm in an extension.',
+      )
+      signal.addEventListener('abort', () => {
+        logger.info('Chrome browser pairing request expired or was cancelled.')
+      })
     },
     ...(chromeBridgeUrl && {
       bridgeConfig: {

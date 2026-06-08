@@ -12,7 +12,7 @@ export type { Tool } from '@modelcontextprotocol/sdk/types.js';
  * All tool names from BROWSER_TOOLS in @ant/claude-for-chrome-mcp.
  * Keep in sync with the package's BROWSER_TOOLS array.
  */
-export type ChromeToolName = 'javascript_tool' | 'read_page' | 'find' | 'form_input' | 'computer' | 'navigate' | 'resize_window' | 'gif_creator' | 'upload_image' | 'get_page_text' | 'tabs_context_mcp' | 'tabs_create_mcp' | 'update_plan' | 'read_console_messages' | 'read_network_requests' | 'shortcuts_list' | 'shortcuts_execute';
+export type ChromeToolName = 'javascript_tool' | 'read_page' | 'find' | 'form_input' | 'computer' | 'navigate' | 'resize_window' | 'switch_browser' | 'list_connected_browsers' | 'select_browser' | 'gif_creator' | 'upload_image' | 'get_page_text' | 'tabs_context_mcp' | 'tabs_create_mcp' | 'tabs_close_mcp' | 'update_plan' | 'read_console_messages' | 'read_network_requests' | 'shortcuts_list' | 'shortcuts_execute';
 const CHROME_EXTENSION_FOCUS_TAB_URL_BASE = 'https://clau.de/chrome/tab/';
 function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: ChromeToolName, verbose: boolean): React.ReactNode {
   const tabId = input.tabId;
@@ -74,6 +74,15 @@ function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: Ch
         secondaryInfo.push(`${input.width}x${input.height}`);
       }
       break;
+    case 'select_browser':
+      if (typeof input.deviceId === 'string') {
+        secondaryInfo.push(input.deviceId.slice(0, 8));
+      }
+      break;
+    case 'switch_browser':
+    case 'list_connected_browsers':
+    case 'tabs_close_mcp':
+      return '';
     case 'read_console_messages':
       if (typeof input.pattern === 'string') {
         secondaryInfo.push(`pattern: ${truncateToWidth(input.pattern, 20)}`);

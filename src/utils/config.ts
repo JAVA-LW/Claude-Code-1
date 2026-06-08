@@ -500,6 +500,7 @@ export type GlobalConfig = {
   chromeExtension?: {
     pairedDeviceId?: string
     pairedDeviceName?: string
+    knownDeviceIds?: string[]
   }
 
   // LSP plugin recommendation preferences
