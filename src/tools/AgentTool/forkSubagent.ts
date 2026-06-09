@@ -7,11 +7,17 @@ import {
   FORK_DIRECTIVE_PREFIX,
 } from '../../constants/xml.js'
 import { isCoordinatorMode } from '../../coordinator/coordinatorMode.js'
+import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import {
+  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+  logEvent,
+} from '../../services/analytics/index.js'
 import type {
   AssistantMessage,
   Message as MessageType,
 } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { isEnvDefinedFalsy, isEnvTruthy } from '../../utils/envUtils.js'
 import { createUserMessage } from '../../utils/messages.js'
 import type { BuiltInAgentDefinition } from './loadAgentsDir.js'
 
@@ -29,13 +35,43 @@ import type { BuiltInAgentDefinition } from './loadAgentsDir.js'
  * Mutually exclusive with coordinator mode — coordinator already owns the
  * orchestration role and has its own delegation model.
  */
-export function isForkSubagentEnabled(): boolean {
-  if (feature('FORK_SUBAGENT')) {
-    if (isCoordinatorMode()) return false
-    if (getIsNonInteractiveSession()) return false
-    return true
+const FORK_SUBAGENT_GATE = 'tengu_copper_fox'
+const FORK_SUBAGENT_EVENT = 'tengu_fork_subagent_enabled'
+
+type ForkSubagentSource = 'env' | 'gb_rollout' | 'disabled'
+
+let forkSubagentSource: ForkSubagentSource | null = null
+
+function resolveForkSubagentSource(): ForkSubagentSource {
+  if (isCoordinatorMode()) return 'disabled'
+  if (isEnvTruthy(process.env.CLAUDE_CODE_FORK_SUBAGENT)) return 'env'
+  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_FORK_SUBAGENT)) return 'disabled'
+  if (getIsNonInteractiveSession()) return 'disabled'
+  if (getFeatureValue_CACHED_MAY_BE_STALE(FORK_SUBAGENT_GATE, false)) {
+    return 'gb_rollout'
   }
-  return false
+  return 'disabled'
+}
+
+export function getForkSubagentSource(): ForkSubagentSource {
+  if (forkSubagentSource !== null) return forkSubagentSource
+  const source = resolveForkSubagentSource()
+  if (source !== 'disabled') {
+    forkSubagentSource = source
+    logEvent(FORK_SUBAGENT_EVENT, {
+      source: source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    })
+  }
+  return source
+}
+
+export function _resetForkSubagentSourceTelemetryForTesting(): void {
+  forkSubagentSource = null
+}
+
+export function isForkSubagentEnabled(): boolean {
+  if (!feature('FORK_SUBAGENT')) return false
+  return getForkSubagentSource() !== 'disabled'
 }
 
 /** Synthetic agent type name used for analytics when the fork path fires. */

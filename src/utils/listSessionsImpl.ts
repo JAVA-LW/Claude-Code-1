@@ -21,6 +21,7 @@ import {
   getProjectsDir,
   MAX_SANITIZED_LENGTH,
   readSessionLite,
+  resolveSessionFilePath,
   sanitizePath,
   validateUuid,
 } from './sessionStoragePortable.js'
@@ -451,4 +452,35 @@ export async function listSessionsImpl(
 
   if (!doStat) return readAllAndSort(candidates)
   return applySortAndLimit(candidates, limit, off)
+}
+
+export async function listSessionSummaries(
+  options?: ListSessionsOptions,
+): Promise<SessionInfo[]> {
+  return listSessionsImpl(options)
+}
+
+export type GetSessionInfoOptions = {
+  /** Project directory to search first. Omit to search all projects. */
+  dir?: string
+}
+
+export async function getSessionInfoImpl(
+  sessionId: string,
+  options?: GetSessionInfoOptions,
+): Promise<SessionInfo | undefined> {
+  const validSessionId = validateUuid(sessionId)
+  if (!validSessionId) return undefined
+
+  const resolved = await resolveSessionFilePath(validSessionId, options?.dir)
+  if (!resolved) return undefined
+
+  const lite = await readSessionLite(resolved.filePath)
+  if (!lite) return undefined
+
+  return parseSessionInfoFromLite(
+    validSessionId,
+    lite,
+    resolved.projectPath,
+  ) ?? undefined
 }

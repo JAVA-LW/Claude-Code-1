@@ -40,6 +40,12 @@ import type {
   SDKSessionInfo,
   SDKUserMessage,
 } from './sdk/coreTypes.js'
+import {
+  getSessionInfoImpl,
+  listSessionsImpl,
+  type GetSessionInfoOptions as GetSessionInfoImplOptions,
+  type ListSessionsOptions as ListSessionsImplOptions,
+} from '../utils/listSessionsImpl.js'
 // Import types needed for function signatures
 import type {
   AnyZodRawShape,
@@ -107,6 +113,34 @@ export function createSdkMcpServer(
 }
 
 export class AbortError extends Error {}
+
+function asPositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined
+}
+
+function normalizeListSessionsOptions(
+  options?: ListSessionsOptions,
+): ListSessionsImplOptions | undefined {
+  if (!options) return undefined
+  const dir = typeof options.dir === 'string' ? options.dir : undefined
+  const limit = asPositiveInteger(options.limit)
+  const offset = asPositiveInteger(options.offset)
+  const includeWorktrees =
+    typeof options.includeWorktrees === 'boolean'
+      ? options.includeWorktrees
+      : undefined
+  return { dir, limit, offset, includeWorktrees }
+}
+
+function normalizeGetSessionInfoOptions(
+  options?: GetSessionInfoOptions,
+): GetSessionInfoImplOptions | undefined {
+  if (!options) return undefined
+  const dir = typeof options.dir === 'string' ? options.dir : undefined
+  return { dir }
+}
 
 /** @internal */
 export function query(_params: {
@@ -202,9 +236,9 @@ export async function getSessionMessages(
  * ```
  */
 export async function listSessions(
-  _options?: ListSessionsOptions,
+  options?: ListSessionsOptions,
 ): Promise<SDKSessionInfo[]> {
-  throw new Error('listSessions is not implemented in the SDK')
+  return listSessionsImpl(normalizeListSessionsOptions(options))
 }
 
 /**
@@ -217,10 +251,10 @@ export async function listSessions(
  * @param options - `{ dir?: string }` project path; omit to search all project directories
  */
 export async function getSessionInfo(
-  _sessionId: string,
-  _options?: GetSessionInfoOptions,
+  sessionId: string,
+  options?: GetSessionInfoOptions,
 ): Promise<SDKSessionInfo | undefined> {
-  throw new Error('getSessionInfo is not implemented in the SDK')
+  return getSessionInfoImpl(sessionId, normalizeGetSessionInfoOptions(options))
 }
 
 /**

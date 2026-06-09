@@ -4583,13 +4583,19 @@ type LiteMetadata = {
   projectPath?: string
   teamName?: string
   customTitle?: string
+  aiTitle?: string
   summary?: string
   tag?: string
   agentSetting?: string
+  sessionKind?: string
+  entrypoint?: string
+  isLoopSession: boolean
   prNumber?: number
   prUrl?: string
   prRepository?: string
 }
+
+const SDK_RESUME_HIDDEN_ENTRYPOINTS = new Set(['sdk-cli', 'sdk-ts', 'sdk-py'])
 
 /**
  * Loads all logs from a single session file with full message data.
@@ -4742,7 +4748,7 @@ async function readLiteMetadata(
   buf: Buffer,
 ): Promise<LiteMetadata> {
   const { head, tail } = await readHeadAndTail(filePath, fileSize, buf)
-  if (!head) return { firstPrompt: '', isSidechain: false }
+  if (!head) return { firstPrompt: '', isSidechain: false, isLoopSession: false }
 
   // Extract stable metadata from the first line via string search.
   // Works even when the first line is truncated (>64KB message).
@@ -4751,6 +4757,11 @@ async function readLiteMetadata(
   const projectPath = extractJsonStringField(head, 'cwd')
   const teamName = extractJsonStringField(head, 'teamName')
   const agentSetting = extractJsonStringField(head, 'agentSetting')
+  const sessionKind = extractJsonStringField(head, 'sessionKind')
+  const entrypoint = extractJsonStringField(head, 'entrypoint')
+  const isLoopSession =
+    head.includes('"isLoopSession":true') ||
+    head.includes('"isLoopSession": true')
 
   // Prefer the last-prompt tail entry — captured by extractFirstPrompt at
   // write time (filtered, authoritative) and shows what the user was most
@@ -4768,11 +4779,13 @@ async function readLiteMetadata(
   // User titles (customTitle field, from custom-title entries) win over
   // AI titles (aiTitle field, from ai-title entries). The distinct field
   // names mean extractLastJsonStringField naturally disambiguates.
+  const aiTitle =
+    extractLastJsonStringField(tail, 'aiTitle') ??
+    extractLastJsonStringField(head, 'aiTitle')
   const customTitle =
     extractLastJsonStringField(tail, 'customTitle') ??
     extractLastJsonStringField(head, 'customTitle') ??
-    extractLastJsonStringField(tail, 'aiTitle') ??
-    extractLastJsonStringField(head, 'aiTitle')
+    aiTitle
   const summary = extractLastJsonStringField(tail, 'summary')
   const tag = extractLastJsonStringField(tail, 'tag')
   const gitBranch =
@@ -4803,9 +4816,13 @@ async function readLiteMetadata(
     projectPath,
     teamName,
     customTitle,
+    aiTitle,
     summary,
     tag,
     agentSetting,
+    sessionKind,
+    entrypoint,
+    isLoopSession,
     prNumber,
     prUrl,
     prRepository,
@@ -5049,10 +5066,10 @@ async function enrichLog(
   // prompt (e.g., large first messages that exceed the 16KB read buffer).
   // Previously these sessions were silently dropped, making them inaccessible
   // via /resume after crashes or large-context sessions.
-  if (!enriched.firstPrompt && !enriched.customTitle) {
+  if (!enriched.firstPrompt && !enriched.customTitle && !meta.aiTitle) {
     enriched.firstPrompt = '(session)'
   }
-  // Filter: skip sidechains and agent sessions
+  // Filter: skip sidechains, agent sessions, daemon workers, SDK-originated sessions outside SDK entrypoints, and loop sessions.
   if (enriched.isSidechain) {
     logForDebugging(
       `Session ${log.sessionId} filtered from /resume: isSidechain=true`,
@@ -5063,6 +5080,29 @@ async function enrichLog(
     logForDebugging(
       `Session ${log.sessionId} filtered from /resume: teamName=${enriched.teamName}`,
     )
+    return null
+  }
+  if (meta.sessionKind === 'daemon' || meta.sessionKind === 'daemon-worker') {
+    logForDebugging(
+      `Session ${log.sessionId} filtered from /resume: sessionKind=${meta.sessionKind}`,
+    )
+    return null
+  }
+  const currentEntrypointIsSdk = SDK_RESUME_HIDDEN_ENTRYPOINTS.has(
+    getEntrypoint() ?? '',
+  )
+  if (
+    !currentEntrypointIsSdk &&
+    meta.entrypoint &&
+    SDK_RESUME_HIDDEN_ENTRYPOINTS.has(meta.entrypoint)
+  ) {
+    logForDebugging(
+      `Session ${log.sessionId} filtered from /resume: entrypoint=${meta.entrypoint}`,
+    )
+    return null
+  }
+  if (!currentEntrypointIsSdk && meta.isLoopSession) {
+    logForDebugging(`Session ${log.sessionId} filtered from /resume: /loop session`)
     return null
   }
 
