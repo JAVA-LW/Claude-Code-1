@@ -460,6 +460,15 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe('Disable all hooks and statusLine execution'),
+      // Recovered (2.1.177, cluster I): skills governance.
+      disableBundledSkills: z
+        .boolean()
+        .optional()
+        .describe('Disable the skills that ship bundled with the CLI'),
+      disableSkillShellExecution: z
+        .boolean()
+        .optional()
+        .describe('Disable shell command execution inside skill prompts'),
       // Which shell backs input-box `!` (see docs/design/ps-shell-selection.md §4.2)
       defaultShell: z
         .enum(['bash', 'powershell'])

@@ -7,6 +7,8 @@ import type { Command } from '../types/command.js'
 import { logForDebugging } from '../utils/debug.js'
 import { getBundledSkillsRoot } from '../utils/permissions/filesystem.js'
 import type { HooksSettings } from '../utils/settings/types.js'
+// Recovered (2.1.177, cluster I): bundled-skills disable gate.
+import { isBundledSkillsDisabled } from './skillGovernance.js'
 
 /**
  * Definition for a bundled skill that ships with the CLI.
@@ -104,6 +106,8 @@ export function registerBundledSkill(definition: BundledSkillDefinition): void {
  * Returns a copy to prevent external mutation.
  */
 export function getBundledSkills(): Command[] {
+  // Recovered (2.1.177, cluster I): suppress bundled skills when disabled.
+  if (isBundledSkillsDisabled()) return []
   return [...bundledSkills]
 }
 

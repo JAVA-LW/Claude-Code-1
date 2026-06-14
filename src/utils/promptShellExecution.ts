@@ -7,6 +7,8 @@ import type { FrontmatterShell } from './frontmatterParser.js'
 import { createAssistantMessage } from './messages.js'
 import { hasPermissionsToUseTool } from './permissions/permissions.js'
 import { processToolResultBlock } from './toolResultStorage.js'
+// Recovered (2.1.177, cluster I): skill shell-execution disable gate.
+import { isSkillShellExecutionDisabled } from '../skills/skillGovernance.js'
 
 // Narrow structural slice both BashTool and PowerShellTool satisfy. We can't
 // use the base Tool type: it marks call()'s canUseTool/parentMessage as
@@ -73,6 +75,12 @@ export async function executeShellCommandsInPrompt(
   shell?: FrontmatterShell,
 ): Promise<string> {
   let result = text
+
+  // Recovered (2.1.177, cluster I): when skill shell execution is disabled,
+  // leave the prompt text untouched (no `!`-command expansion).
+  if (isSkillShellExecutionDisabled()) {
+    return result
+  }
 
   // Resolve the tool once. `shell === undefined` and `shell === 'bash'` both
   // hit BashTool. PowerShell only when the runtime gate allows — a skill
