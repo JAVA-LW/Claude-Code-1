@@ -407,6 +407,57 @@ function isMcpServerDenied(
   return false
 }
 
+// Recovered (2.1.177, cluster H): connect-time MCP governance.
+// RECOVERY-UNCERTAIN: the exact set of scopes evaluated at connect time
+// (minified Ck5); 'dynamic' (servers added at runtime) is the known case.
+const CONNECT_TIME_SCOPES: ReadonlySet<ConfigScope> = new Set([
+  'dynamic',
+] as ConfigScope[])
+
+/** Builtin in-process MCP servers (IDE / claude-in-chrome). (minified isBuiltinInProcessMcpServer) */
+export function isBuiltinInProcessMcpServer(name: string): boolean {
+  // RECOVERY-UNCERTAIN: builtin in-process server name set.
+  return name === 'claude-in-chrome' || name === 'ide'
+}
+
+/** Whether a server should be blocked when it tries to connect. (minified isMcpServerBlockedAtConnectTime) */
+export function isMcpServerBlockedAtConnectTime(
+  name: string,
+  config: ScopedMcpServerConfig,
+): boolean {
+  if (!CONNECT_TIME_SCOPES.has(config.scope)) return false
+  if (config.type === 'sdk') return false
+  if (
+    isBuiltinInProcessMcpServer(name) ||
+    config.type === 'sse-ide' ||
+    config.type === 'ws-ide'
+  ) {
+    return isMcpServerDenied(name, config)
+  }
+  return !isMcpServerAllowedByPolicy(name, config)
+}
+
+/** Filter dynamically-added MCP servers through the connect-time policy. (minified filterDynamicMcpServersByPolicy) */
+export function filterDynamicMcpServersByPolicy(
+  configs: Record<string, ScopedMcpServerConfig> | undefined,
+): { configs: Record<string, ScopedMcpServerConfig>; blocked: string[] } {
+  if (!configs) return { configs: {}, blocked: [] }
+  const allowed: Record<string, ScopedMcpServerConfig> = {}
+  const blocked: string[] = []
+  for (const [name, config] of Object.entries(configs)) {
+    if (isMcpServerBlockedAtConnectTime(name, config)) blocked.push(name)
+    else allowed[name] = config
+  }
+  return { configs: allowed, blocked }
+}
+
+/** Env flag: skip MCP server discovery. (minified skipMcpDiscovery) */
+export const ENV_SKIP_MCP_DISCOVERY = 'CLAUDE_CODE_SKIP_MCP_DISCOVERY'
+export function skipMcpDiscovery(): boolean {
+  const v = process.env[ENV_SKIP_MCP_DISCOVERY]
+  return v === '1' || v === 'true'
+}
+
 /**
  * Check if an MCP server is allowed by enterprise policy
  * Checks name-based, command-based, and URL-based restrictions
