@@ -767,6 +767,43 @@ export type ShutdownRejectedMessage = z.infer<
 >
 
 /**
+ * Task assignment message sent from leader to teammate via mailbox.
+ * Recovered (2.1.177, cluster J).
+ */
+export const TaskAssignmentMessageSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('task_assignment'),
+    taskId: z.string(),
+    subject: z.string(),
+    description: z.string(),
+    assignedBy: z.string(),
+    timestamp: z.string(),
+  }),
+)
+
+export type TaskAssignmentMessage = z.infer<
+  ReturnType<typeof TaskAssignmentMessageSchema>
+>
+
+/**
+ * Task completed message sent from teammate to leader via mailbox.
+ * Recovered (2.1.177, cluster J).
+ */
+export const TaskCompletedMessageSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('task_completed'),
+    from: z.string().optional(),
+    taskId: z.string(),
+    taskSubject: z.string().optional(),
+    timestamp: z.string().optional(),
+  }),
+)
+
+export type TaskCompletedMessage = z.infer<
+  ReturnType<typeof TaskCompletedMessageSchema>
+>
+
+/**
  * Creates a shutdown request message to send to a teammate
  */
 export function createShutdownRequestMessage(params: {
