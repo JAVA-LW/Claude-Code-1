@@ -9,6 +9,8 @@ import { FileWriteTool } from './tools/FileWriteTool/FileWriteTool.js'
 import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
+// Recovered (2.1.177, cluster A): publish a file as a claude.ai Artifact. Self-gated via isEnabled().
+import { ArtifactTool } from './tools/ArtifactTool/ArtifactTool.js'
 import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
 import { BriefTool } from './tools/BriefTool/BriefTool.js'
 // Dead code elimination: conditional import for ant-only tools
@@ -211,6 +213,8 @@ export function getAllBaseTools(): Tools {
     FileWriteTool,
     NotebookEditTool,
     WebFetchTool,
+    // Recovered (2.1.177, cluster A): self-gated via ArtifactTool.isEnabled().
+    ArtifactTool,
     TodoWriteTool,
     WebSearchTool,
     TaskStopTool,
