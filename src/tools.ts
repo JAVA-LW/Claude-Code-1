@@ -11,6 +11,8 @@ import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
 // Recovered (2.1.177, cluster A): publish a file as a claude.ai Artifact. Self-gated via isEnabled().
 import { ArtifactTool } from './tools/ArtifactTool/ArtifactTool.js'
+// Recovered (2.1.177, cluster B): read/write/search the session's claude.ai Project. Self-gated via isEnabled().
+import { ProjectsTool } from './tools/ProjectsTool/ProjectsTool.js'
 import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
 import { BriefTool } from './tools/BriefTool/BriefTool.js'
 // Dead code elimination: conditional import for ant-only tools
@@ -215,6 +217,8 @@ export function getAllBaseTools(): Tools {
     WebFetchTool,
     // Recovered (2.1.177, cluster A): self-gated via ArtifactTool.isEnabled().
     ArtifactTool,
+    // Recovered (2.1.177, cluster B): self-gated via ProjectsTool.isEnabled().
+    ProjectsTool,
     TodoWriteTool,
     WebSearchTool,
     TaskStopTool,
