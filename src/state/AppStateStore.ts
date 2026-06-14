@@ -92,7 +92,8 @@ export type AppState = DeepImmutable<{
   mainLoopModel: ModelSetting
   mainLoopModelForSession: ModelSetting
   statusLineText: string | undefined
-  expandedView: 'none' | 'tasks' | 'teammates'
+  // Recovered (2.1.177, cluster F): 'agents' adds the Agents/Fleet view.
+  expandedView: 'none' | 'tasks' | 'teammates' | 'agents'
   isBriefOnly: boolean
   // Optional - only present when ENABLE_AGENT_SWARMS is true (for dead code elimination)
   showTeammateMessagePreview?: boolean
